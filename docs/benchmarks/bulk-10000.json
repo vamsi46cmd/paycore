@@ -1,0 +1,22 @@
+{
+  "vus": 50,
+  "requestedPayments": 10000,
+  "paymentsSubmitted": 10000,
+  "httpRequests": 59404,
+  "httpErrorRatePercent": 0,
+  "apiLatencyMs": {
+    "p50": 5.9,
+    "p95": 17.9,
+    "p99": 29.4
+  },
+  "submitSeconds": 48,
+  "capturedPayments": 10000,
+  "submitPhaseSeconds": 48,
+  "totalSecondsUntilAllCaptured": 48,
+  "endToEndThroughputPaymentsPerSecond": 208.33,
+  "reconciliationDiscrepanciesForThisRun": 0,
+  "captureJournalsForThisRun": 10000,
+  "unbalancedJournalsAnywhere": 0,
+  "duplicatePostingsAnywhere": 0,
+  "paymentsNotCapturedFromThisRun": 0
+}

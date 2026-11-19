@@ -1,0 +1,170 @@
+name: paycore
+
+# Local development stack. Every credential below is a development-only default; never reuse in a public deployment.
+# PayCore is a financial-systems SIMULATION: no real payment data, no live provider, not PCI DSS compliant.
+
+x-app-env: &app-env
+  DB_URL: jdbc:postgresql://postgres:5432/paycore
+  DB_USER: ${POSTGRES_USER:-paycore}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-paycore-dev}
+  REDIS_HOST: redis
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  ADMIN_KEY: ${ADMIN_KEY:-dev-only-admin-key-change-me}
+  WEBHOOK_ALLOWED_HOSTS: payment-api,localhost
+  RATELIMIT_PER_SECOND: ${RATELIMIT_PER_SECOND:-200}
+  DB_POOL_MAX: ${DB_POOL_MAX:-12}
+  JAVA_TOOL_OPTIONS: -Xms128m
+
+x-app-health: &app-health
+  test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8081; printf \"GET /actuator/health/readiness HTTP/1.0\\r\\n\\r\\n\" >&3; grep -q \" 200\" <&3'"]
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 30s
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: paycore
+      POSTGRES_USER: ${POSTGRES_USER:-paycore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paycore-dev}
+    command: ["postgres", "-c", "max_connections=200"]
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paycore} -d paycore"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    mem_limit: 768m
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    mem_limit: 192m
+
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # topics are created explicitly by the applications (KafkaAdmin)
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    ports:
+      - "127.0.0.1:29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+    mem_limit: 900m
+    stop_grace_period: 30s
+
+  payment-api:
+    build: ./app
+    image: paycore/app:local
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    environment:
+      <<: *app-env
+      ROLE_API: "true"
+      ROLE_WORKER: "false"
+      ROLE_WEBHOOK: "false"
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+    healthcheck: *app-health
+    mem_limit: 640m
+    stop_grace_period: 40s
+    restart: unless-stopped
+
+  payment-worker:
+    image: paycore/app:local
+    depends_on:
+      payment-api: { condition: service_healthy }   # the API container runs the Flyway migrations first
+    environment:
+      <<: *app-env
+      ROLE_API: "false"
+      ROLE_WORKER: "true"
+      ROLE_WEBHOOK: "false"
+    healthcheck: *app-health
+    mem_limit: 640m
+    stop_grace_period: 40s
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  webhook-worker:
+    image: paycore/app:local
+    depends_on:
+      payment-api: { condition: service_healthy }
+    environment:
+      <<: *app-env
+      ROLE_API: "false"
+      ROLE_WORKER: "false"
+      ROLE_WEBHOOK: "true"
+    healthcheck: *app-health
+    mem_limit: 640m
+    stop_grace_period: 40s
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      payment-api: { condition: service_healthy }
+    mem_limit: 256m
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin-dev}   # development only
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+    mem_limit: 256m
+
+volumes:
+  postgres-data:
+  kafka-data:
+  prometheus-data:
+  grafana-data:

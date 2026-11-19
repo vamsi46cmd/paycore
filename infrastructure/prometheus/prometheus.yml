@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Docker DNS returns every container of a service, so all replicas are scraped.
+  - job_name: paycore-api
+    metrics_path: /actuator/prometheus
+    dns_sd_configs: [{ names: ["payment-api"], type: A, port: 8081 }]
+  - job_name: paycore-worker
+    metrics_path: /actuator/prometheus
+    dns_sd_configs: [{ names: ["payment-worker"], type: A, port: 8081 }]
+  - job_name: paycore-webhook
+    metrics_path: /actuator/prometheus
+    dns_sd_configs: [{ names: ["webhook-worker"], type: A, port: 8081 }]

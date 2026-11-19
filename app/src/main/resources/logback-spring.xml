@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <!-- Structured JSON logs. requestId (correlation id) is in the MDC; request bodies, API keys and secrets are never logged. -->
+  <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+      <includeMdcKeyName>requestId</includeMdcKeyName>
+      <includeMdcKeyName>paymentId</includeMdcKeyName>
+    </encoder>
+  </appender>
+  <root level="INFO">
+    <appender-ref ref="JSON"/>
+  </root>
+  <logger name="org.apache.kafka" level="WARN"/>
+  <logger name="org.springframework.kafka" level="WARN"/>
+</configuration>

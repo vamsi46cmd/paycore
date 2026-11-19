@@ -1,0 +1,126 @@
+server:
+  port: 8080
+  shutdown: graceful
+  tomcat:
+    max-swallow-size: 128KB
+
+spring:
+  application:
+    name: paycore
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/paycore}
+    username: ${DB_USER:paycore}
+    password: ${DB_PASSWORD:paycore-dev}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:12}
+      minimum-idle: 2
+      connection-timeout: 3000
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 300ms
+      connect-timeout: 300ms
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      accept-float-as-int: false      # 12.5 must be rejected, never silently truncated to 12 (money!)
+    mapper:
+      allow-coercion-of-scalars: false   # "100" (a string) is not an amount
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        retries: 5
+        retry.backoff.ms: 200
+        delivery.timeout.ms: 8000
+        request.timeout.ms: 4000
+        max.block.ms: 4000
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        max.poll.interval.ms: 120000
+    listener:
+      ack-mode: record
+
+management:
+  server:
+    port: 8081            # health + metrics on a separate, non-public port
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+    tags:
+      application: paycore
+
+springdoc:
+  api-docs:
+    path: /api/v1/openapi
+  swagger-ui:
+    path: /api/v1/docs
+
+paycore:
+  admin-key: ${ADMIN_KEY:}                 # required (>= 16 chars); no default on purpose
+  roles:
+    api: ${ROLE_API:true}                  # REST controllers
+    worker: ${ROLE_WORKER:true}            # payment command consumer
+    webhook: ${ROLE_WEBHOOK:true}          # webhook fan-out/delivery + scheduled reconciliation
+  topics:
+    prefix: ${TOPIC_PREFIX:}               # tests use a unique prefix
+    partitions: 6
+  consumer-group-prefix: ${GROUP_PREFIX:paycore}
+  idempotency:
+    ttl: 24h
+  outbox:
+    enabled: true
+    poll-interval: PT0.2S      # ISO-8601: used in an @Scheduled placeholder
+    batch-size: 100
+  worker:
+    concurrency: ${WORKER_CONCURRENCY:3}
+    max-retries: 5
+    backoff-initial: 1s
+    backoff-multiplier: 2.0
+    backoff-max: 10s
+  provider:
+    delay-ms: 300
+    unavailable-failures: 2
+  webhooks:
+    allowed-hosts: ${WEBHOOK_ALLOWED_HOSTS:localhost,payment-api}
+    max-attempts: 6
+    backoff-base: 2s
+    batch-size: 20
+    timeout: 3s
+    test-receiver-enabled: ${TEST_RECEIVER_ENABLED:true}   # development only
+    allow-public-hosts: false     # true = also allow non-allowlisted hosts that resolve ONLY to public addresses (see UrlPolicy)
+  reconciliation:
+    stuck-after: 5m
+    schedule-enabled: ${RECON_SCHEDULE_ENABLED:true}
+    interval: PT5M
+  ratelimit:
+    per-second: ${RATELIMIT_PER_SECOND:200}
+  test-hooks:
+    outbox-crash-after-ack: 0              # tests only: simulate a publisher crash after Kafka ack

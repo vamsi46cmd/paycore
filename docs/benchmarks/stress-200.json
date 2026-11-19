@@ -1,0 +1,80 @@
+{
+  "vus": 200,
+  "duration": "30s",
+  "paymentsCaptured": 5811,
+  "paymentsCapturedPerSecond": 187.73,
+  "httpRequests": 52126,
+  "httpRequestsPerSecond": 1684,
+  "apiLatencyMs": {
+    "avg": 94.7,
+    "p50": 83.7,
+    "p95": 212.7,
+    "p99": 304.9,
+    "max": 609.4
+  },
+  "paymentCreateLatencyMs": {
+    "avg": 104.7,
+    "p50": 91,
+    "p95": 240.1,
+    "p99": 331.5,
+    "max": 549
+  },
+  "completionLatencyMs_createToCaptured": {
+    "avg": 1044.2,
+    "p50": 1011,
+    "p95": 1485.5,
+    "p99": 1819.9,
+    "max": 2457
+  },
+  "httpErrorRatePercent": 0,
+  "flowsCompletedPercent": 100,
+  "duplicateChecks": 11622,
+  "duplicateMismatches": 0,
+  "label": "stress-200",
+  "peakKafkaConsumerLagDuringRun": "104.0",
+  "peakOutboxBacklogDuringRun": "238.0",
+  "dbConnectionsMidRun": 27,
+  "containerSamplesMidRun": [
+    {
+      "name": "paycore-webhook-worker-1",
+      "cpu": "12.19%",
+      "mem": "314.9MiB / 640MiB"
+    },
+    {
+      "name": "paycore-payment-worker-2",
+      "cpu": "16.06%",
+      "mem": "314.3MiB / 640MiB"
+    },
+    {
+      "name": "paycore-payment-worker-1",
+      "cpu": "15.34%",
+      "mem": "312.5MiB / 640MiB"
+    },
+    {
+      "name": "paycore-payment-api-1",
+      "cpu": "82.67%",
+      "mem": "410MiB / 640MiB"
+    },
+    {
+      "name": "paycore-postgres-1",
+      "cpu": "165.78%",
+      "mem": "238.1MiB / 768MiB"
+    },
+    {
+      "name": "paycore-redis-1",
+      "cpu": "3.76%",
+      "mem": "3.883MiB / 192MiB"
+    },
+    {
+      "name": "paycore-kafka-1",
+      "cpu": "28.41%",
+      "mem": "447.2MiB / 900MiB"
+    }
+  ],
+  "invariantsAfterRun": {
+    "unbalancedJournals": 0,
+    "duplicatePostings": 0,
+    "overRefundedPayments": 0,
+    "capturedWithoutJournal": 0
+  }
+}
